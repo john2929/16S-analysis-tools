@@ -6,11 +6,11 @@ metastats_FDR_correction.R is a script that takes mothur metastats output and th
 This requires a specific directory organization to work:
 
 metastats_output/
-   mothur.taxonomy
-   metastats_files/
-      file1.metastats
-      file2.metastats	
-      ...
+>mothur.taxonomy
+>metastats_files/
+>>file1.metastats
+>>file2.metastats	
+>>...
 
 or if you desire it accepts one more level of directories
 metastats_output/
