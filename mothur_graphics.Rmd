@@ -1,0 +1,75 @@
+---
+title: "Graphical output from mother"
+author: "Ruth Centeno"
+date: "4/5/2018"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_knit$set(root.dir = '~/USDA_laptop//Desktop/BMD_turkeys/data/metabolome/')
+
+library(vegan)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+```
+
+Load in data files
+
+```{r}
+otu_table <- "metabolome_cc.csv"
+metadata <- "samples_cc.csv"
+
+#first the data file
+metabolome <- read.csv(otu_table, row.names = 1) 
+rownames(metabolome) <- paste("x", rownames(metabolome), sep = "")
+otu_subsample <- as.data.frame(t(metabolome[,9:ncol(metabolome)]))
+
+#then the metadata file
+meta <- read.table(file = metadata, sep = ',', header = TRUE)
+meta <- meta[meta$name %in% rownames(otu_subsample),]
+metabolome_key <- meta[,c(2,3,1,4,6,8)]
+
+```
+Some checks to make sure the metadata and data files are in agreement
+
+```{r}
+# this makes sure there are no samples in the OTU table that are not in our metadata
+otu_subsample <- otu_subsample[rownames(otu_subsample) %in% meta$name,]
+
+#otu_subsample <- otu_subsample[,-c(1,2,3)]  # removes extra info that mothur includes in their OTU tables
+#sums<-as.data.frame(rowSums((otu_subsample)))
+```
+Now we need to merge the data file with the metadata file
+
+```{r}
+nmds <-as.data.frame(mds$points)
+nmds$group <- rownames(nmds)
+metanmds <- merge(meta, nmds, by.x = 'name', by.y = 'group')
+metanmds$day <- factor(metanmds$day)
+metanmds$location <- factor(metanmds$location)
+metanmds$trt <- factor(metanmds$trt)
+metanmds$group <- factor(metanmds$group)
+str(metanmds)
+```
+
+Simple command to make a basic plot
+
+```{r}
+ggplot(metanmds, aes(x=MDS1, y=MDS2)) + geom_point(aes(color = day, shape=trt))
+#and save it
+ggsave("analysis/nmds_all.png", height = 5, width = 7)
+```
+
+
+Add in some more arguements
+
+```{r}
+ggplot(metanmds, aes(x=groupX, y=groupY)) +
+  geom_point(aes(color=day, shape=trt)) +
+  facet_grid(location~.)
+ggsave("../../analysis/nmds_all_centroids.png", height = 8, width = 4)
+```
+
+
+
