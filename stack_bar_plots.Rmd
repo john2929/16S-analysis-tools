@@ -1,0 +1,129 @@
+---
+title: "Stacked marplot"
+author: "Tim Johnson"
+date: "4/5/2018"
+output: html_document
+---
+
+OK so now we move forward to using phyloseq to investigate the taxonomic composition of the different communities.
+
+```{r setup}
+knitr::opts_knit$set(root.dir = '~/USDA_laptop//Desktop/BMD_turkeys/data/metabolome/')
+
+#Load libraries
+library(ggplot2)
+library(vegan)
+library(dplyr)
+library(scales)
+library(grid)
+library(reshape2)
+library(phyloseq)
+library(tidyr)
+```
+
+```{r}
+#Assign varibles for the paths of the data to import
+sharedfile <- "bmd_only.tax.shared"
+taxfile <- "../stability.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.abund.rdp.wang.tx.1.cons.taxonomy"
+mapfile <- "../../BMD_design.txt"
+
+#Import mothur data
+mothur_data <- import_mothur(mothur_shared_file = sharedfile, mothur_constaxonomy_file = taxfile)
+head(meta)
+meta$day <- factor(meta$day)
+```
+
+We convert this dataframe into phyloseq format with a simple constructor `sample_data`. The only formatting required to merge the sample data into a phyloseq object is that the rownames must match the sample names in your shared and taxonomy files.
+
+```{r}
+metadata <- sample_data(meta)
+rownames(metadata) <- metadata$name
+
+#Merge this into our phyloseq object
+BMD_data <- merge_phyloseq(mothur_data, metadata)
+BMD_data
+```
+Lets check some things to make sure everything looks alright. First taxonomy level names
+
+```{r}
+colnames(tax_table(BMD_data))
+
+colnames(tax_table(BMD_data)) <- c("Kingdom", "Phylum", "Class", 
+  "Order", "Family", "Genus")
+```
+
+This is also a good time to check all your samples and taxa to make sure you dont need to filter out PCR negative controls or mitochondria or chloroplast OTUs out of your dataset. In my case this has already been done.
+
+So now we will make some beautiful stacked barplots to get an idea of what is going on in these samples.
+
+```{r}
+# Set colors for plotting
+my_colors <- c(
+  '#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c',
+  '#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928', 
+  "#CBD588", "#5F7FC7", "orange","#DA5724", "#508578", "#CD9BCD",
+   "#AD6F3B", "#673770","#D14285", "#652926", "#C84248", 
+  "#8569D5", "#5E738F","#D1A33D", "#8A7C64", "#599861", "black"
+)
+
+#If you want different taxonomic level, find and replace the taxonomic level listed here
+my_level <- "Family"
+rm(bmd.summary)
+bmd.summary <- BMD_data %>%
+  tax_glom(taxrank = my_level) %>%                     # agglomerate at Family level
+  transform_sample_counts(function(x) {x/sum(x)} ) %>% # Transform to rel. abundance
+  psmelt()  %>%                                           # Melt to long format
+  group_by(group, Family) %>%
+  summarise(Abundance.average=mean(Abundance)) 
+
+bmd.taxa.average <- bmd.summary %>% 
+  group_by(Family) %>%
+  summarise(Family.average=mean(Abundance.average))
+  
+# merging the phyla means with the metadata #
+bmd.summary <- merge(bmd.summary, bmd.taxa.average)
+bmd_meta <- merge(bmd.summary, unique(meta[,-1]) , by = 'group')
+
+abund_filter <- 0.01
+bmd_meta2 <- filter(bmd_meta, Family.average>abund_filter)
+str(bmd_meta2)
+bmd_meta2$location <- factor(bmd_meta2$location, levels = c("jc", "ic", "cc"))
+unique(bmd_meta2$Family)
+
+# Plot 
+ggplot(bmd_meta2, aes(x = trt, y = Abundance.average, fill = Family)) + 
+  facet_grid(location~day) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors) +
+  # Remove x axis title
+  #theme(axis.title.x = element_blank()) + 
+  ylim(c(0,1)) +
+  guides(fill = guide_legend(reverse = F, keywidth = .5, keyheight = .5, ncol = 1)) +
+  theme(legend.text=element_text(size=8)) +
+  #theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab(paste0("Relative Abundance (Family > ", abund_filter * 100,"%) \n")) +
+  ggtitle("Family Composition of turkey GI tract \n and impact of BMD treatment") 
+ggsave("../../analysis/Family2BarPlot_AllSamples.png", height = 5)
+
+
+```
+```{r}
+
+# Plot 
+ggplot(bmd_meta2, aes(x = day, y = Abundance.average, fill = Family)) + 
+  facet_grid(location~trt) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = my_colors) +
+  # Remove x axis title
+  #theme(axis.title.x = element_blank()) + 
+  ylim(c(0,1)) +
+  guides(fill = guide_legend(reverse = F, keywidth = .5, keyheight = .5, ncol = 1)) +
+  theme(legend.text=element_text(size=8)) +
+  #theme(legend.position="bottom") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  ylab(paste0("Relative Abundance (Family > ", abund_filter * 100,"%) \n")) +
+  ggtitle("Family Composition of turkey GI tract \n and impact of BMD treatment") 
+ggsave("../../analysis/FamilyTimeBarPlot_AllSamples.png", height = 5)
+
+```
